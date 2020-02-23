@@ -1,4 +1,4 @@
-# docker-dev-env
+# docker-php-devenv
 Local development enviroment with Docker (Apache 2.4, PHP 7.4 and PHP 7.4 CLI with extensions). This repo provides Dockerfiles for automated building with Dockerhub.
 
 The images are based on ```php``` image from Dockerhub and featureing more extensions:
