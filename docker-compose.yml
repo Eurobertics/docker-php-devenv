@@ -1,0 +1,21 @@
+version: '3.4'
+services:
+ php74-apache:
+  #build: ./php74-apache24/
+  image: eurobertics/php-devenv:apache24
+  ports:
+    - 80:80
+  volumes:
+    - d:\docker_web:/var/www/html
+ redis:
+  image: redis
+  command:
+   - --appendonly yes
+  volumes:
+   - d:\docker_redis:/data
+ mariadb:
+  image: mariadb
+  environment:
+   MYSQL_ROOT_PASSWORD: dockerphpdev
+  volumes:
+   - d:\docker_sql:/var/lib/mysql
