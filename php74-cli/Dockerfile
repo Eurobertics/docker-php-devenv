@@ -3,6 +3,7 @@ LABEL maintainer.name="Bernd Robertz"
 LABEL maintainer.email="brobertz.net@gmail.com"
 LABEL version="1.0"
 LABEL description="Basic PHP web development image for PHP 7.4 CLI with the most needed extensions and Composer with Git."
+ENV DEBIAN_FRONTEND noninteractive
 
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
@@ -28,3 +29,5 @@ RUN php -r "if (hash_file('sha384', 'composer-setup.php') === 'e0012edf3e80b6978
 RUN php composer-setup.php
 RUN mv composer.phar /usr/bin/composer
 RUN php -r "unlink('composer-setup.php');"
+
+RUN mkdir -p /opt/project
