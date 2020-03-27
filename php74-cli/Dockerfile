@@ -7,9 +7,9 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
-RUN apt-get update && apt-get -y install libonig-dev libcurl4-openssl-dev libbz2-dev zlib1g-dev libpng-dev libxslt1-dev libmemcached-dev wget git
+RUN apt-get update && apt-get -y install libonig-dev libcurl4-openssl-dev libbz2-dev libzip-dev zlib1g-dev libpng-dev libxslt1-dev libmemcached-dev wget git unzip
 
-RUN docker-php-ext-install mysqli mbstring gd bz2 xsl curl
+RUN docker-php-ext-install mysqli mbstring gd bz2 xsl curl zip
 
 RUN pecl install redis && docker-php-ext-enable redis;
 
