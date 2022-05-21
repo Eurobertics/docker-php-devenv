@@ -33,11 +33,11 @@ RUN pecl install memcached && docker-php-ext-enable memcached
 
 RUN pecl install xdebug; \
 	docker-php-ext-enable xdebug; \
-	echo xdebug.remote_enable=1 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.remote_autostart=0 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.remote_connect_back=1 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.remote_port=9000 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.remote_log=/tmp/php7-xdebug.log >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
+	echo xdebug.mode=debug >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	echo xdebug.start_with_request=yes >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	echo xdebug.discover_client_host=true >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	echo xdebug.client_port=9003 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	echo xdebug.log=/tmp/php7-xdebug.log >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
 	#echo xdebug.idekey="PHPSTORM" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
 
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
