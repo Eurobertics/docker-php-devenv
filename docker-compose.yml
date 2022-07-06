@@ -1,8 +1,8 @@
 version: '3.4'
 services:
  php74-apache:
-  #build: ./php74-apache24/
-  image: eurobertics/php-devenv:74-apache24
+  #build: ./74-apache24/
+  image: eurobertics/php-devenv:${PHPVERSION}-apache24
   ports:
     - 80:80
   volumes:
