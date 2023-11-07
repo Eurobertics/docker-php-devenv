@@ -1,8 +1,8 @@
-FROM php:7.4-apache
+FROM php:8.2-12-cli
 LABEL maintainer.name="Bernd Robertz"
 LABEL maintainer.email="brobertz.net@gmail.com"
-LABEL version="1.3"
-LABEL description="Basic PHP web development image with Apache 2.4 and PHP 7.4 with the most needed extensions and Composer with Git."
+LABEL version="1.0"
+LABEL description="Basic PHP web development image for PHP 8.2 CLI with the most needed extensions and Composer with Git."
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
@@ -46,6 +46,4 @@ RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &&
 	mv composer.phar /usr/bin/composer && \
 	php -r "unlink('composer-setup.php');"
 
-#RUN echo '<?php phpinfo(); ?>' >> /var/www/html/phpinfo.php
-
-#VOLUME /var/www/html
+RUN mkdir -p /opt/project

@@ -1,4 +1,4 @@
-FROM php:8.1-apache
+FROM php:8.2.25-apache
 LABEL maintainer.name="Bernd Robertz"
 LABEL maintainer.email="brobertz.net@gmail.com"
 LABEL version="1.2"
@@ -33,15 +33,15 @@ RUN pecl install redis && docker-php-ext-enable redis && pecl install memcached 
 
 RUN pecl install xdebug; \
 	docker-php-ext-enable xdebug; \
-	echo xdebug.mode=debug >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+	echo xdebug.mode=develop,debug >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
   	echo xdebug.start_with_request=yes >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.discover_client_host=true >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
-  	echo xdebug.client_port=9003 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	echo xdebug.discover_client_host=host.docker.internal >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
+  	#echo xdebug.client_port=9003 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
   	echo xdebug.log=/tmp/php-xdebug.log >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
 	#echo xdebug.idekey="PHPSTORM" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
 
 RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
-	php -r "if (hash_file('sha384', 'composer-setup.php') === '55ce33d7678c5a611085589f1f3ddf8b3c52d662cd01d4ba75c0ee0459970c2200a51f492d557530c71c15d8dba01eae') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;" && \
+	php -r "if (hash_file('sha384', 'composer-setup.php') === 'e21205b207c3ff031906575712edab6f13eb0b361f2085f1f1237b7126d785e826a450292b6cfd1d64d92e6563bbde02') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;" && \
 	php composer-setup.php && \
 	mv composer.phar /usr/bin/composer && \
 	php -r "unlink('composer-setup.php');"
