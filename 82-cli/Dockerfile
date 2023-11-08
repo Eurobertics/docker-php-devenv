@@ -1,4 +1,4 @@
-FROM php:8.2-12-cli
+FROM php:8.2.12-cli
 LABEL maintainer.name="Bernd Robertz"
 LABEL maintainer.email="brobertz.net@gmail.com"
 LABEL version="1.0"
