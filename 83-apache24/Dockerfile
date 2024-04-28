@@ -1,8 +1,8 @@
-FROM php:8.2.12-apache
+FROM php:8.3.4-apache
 LABEL maintainer.name="Bernd Robertz"
 LABEL maintainer.email="brobertz.net@gmail.com"
-LABEL version="1.1"
-LABEL description="Basic PHP web development image with Apache 2.4 and PHP 8.2 with the most needed extensions and Composer with Git."
+LABEL version="1.0"
+LABEL description="Basic PHP web development image with Apache 2.4 and PHP 8.3 with the most needed extensions and Composer with Git."
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
@@ -39,7 +39,7 @@ RUN pecl install xdebug; \
   	#echo xdebug.client_port=9003 >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini; \
   	echo xdebug.log=/tmp/php-xdebug.log >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
 	#echo xdebug.idekey="PHPSTORM" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini;
-
+ 
 #RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && \
 #	php -r "if (hash_file('sha384', 'composer-setup.php') === 'dac665fdc30fdd8ec78b38b9800061b4150413ff2e3b6f88543c636f7cd84f6db9189d43a81e5503cda447da73c7e5b6') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;" && \
 #	php composer-setup.php && \
