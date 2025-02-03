@@ -29,6 +29,8 @@ RUN docker-php-ext-install zip && \
 	docker-php-ext-install fileinfo && \
 	docker-php-ext-install dom
 
+RUN docker-php-ext-configure pcntl --enable-pcntl && docker-php-ext-install pcntl
+
 RUN pecl install redis && docker-php-ext-enable redis && pecl install memcached && docker-php-ext-enable memcached
 
 RUN pecl install xdebug; \
