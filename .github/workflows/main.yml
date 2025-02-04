@@ -41,10 +41,17 @@ jobs:
         run: |
           PLATFORMS="linux/amd64,linux/arm64,linux/arm/v6,linux/arm/v7"
           IMAGE_NAME="eurobertics/php-devenv"
+          EXCLUDE_DIRS=("74-apache24" "74-cli")
 
           for dir in */; do
             TAG="${dir%/}"
             DOCKERFILE="$dir/Dockerfile"
+
+            # Prüfen, ob das Verzeichnis auf der Blacklist ist
+            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
+              echo "Skipping $TAG (excluded from build)"
+              continue
+            fi
 
             if [ -f "$DOCKERFILE" ]; then
               echo "Building and pushing $IMAGE_NAME:$TAG"
