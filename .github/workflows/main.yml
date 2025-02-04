@@ -39,35 +39,28 @@ jobs:
 
       - name: Build and Push Docker Images
         run: |
-          PLATFORMS="linux/amd64,linux/arm64,linux/arm/v6,linux/arm/v7"
+          PLATFORMS="linux/arm64"
           IMAGE_NAME="eurobertics/php-devenv"
           EXCLUDE_DIRS=("74-apache24" "74-cli")
+          dir="83-apache24/"
 
-          for dir in */; do
-            TAG="${dir%/}"
-            DOCKERFILE="$dir/Dockerfile"
+          TAG="83-apache24"
+          DOCKERFILE="$dir/Dockerfile"
 
-            # Prüfen, ob das Verzeichnis auf der Blacklist ist
-            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
-              echo "Skipping $TAG (excluded from build)"
-              continue
-            fi
+          if [ -f "$DOCKERFILE" ]; then
+            echo "Building and pushing $IMAGE_NAME:$TAG-test"
 
-            if [ -f "$DOCKERFILE" ]; then
-              echo "Building and pushing $IMAGE_NAME:$TAG"
+            # GitHub Container Registry
+            docker buildx build --platform $PLATFORMS \
+              --push \
+              -t ghcr.io/${{ secrets.GHCR_USERNAME }}/$IMAGE_NAME:$TAG-test \
+              -f $DOCKERFILE $dir
 
-              # GitHub Container Registry
-              docker buildx build --platform $PLATFORMS \
-                --push \
-                -t ghcr.io/${{ secrets.GHCR_USERNAME }}/$IMAGE_NAME:$TAG \
-                -f $DOCKERFILE $dir
-
-              # Docker Hub
-              docker buildx build --platform $PLATFORMS \
-                --push \
-                -t ${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$TAG \
-                -f $DOCKERFILE $dir
-            else
-              echo "No Dockerfile found in $dir, skipping..."
-            fi
-          done
+            # Docker Hub
+            docker buildx build --platform $PLATFORMS \
+              --push \
+              -t ${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$TAG-test \
+              -f $DOCKERFILE $dir
+          else
+            echo "No Dockerfile found in $dir, skipping..."
+          fi
