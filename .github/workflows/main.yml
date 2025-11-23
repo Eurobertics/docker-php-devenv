@@ -41,7 +41,7 @@ jobs:
         run: |
           PLATFORMS="linux/amd64,linux/arm64,linux/arm/v6,linux/arm/v7"
           IMAGE_NAME="eurobertics/php-devenv"
-          EXCLUDE_DIRS=("74-apache24" "74-cli")
+          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli")
 
           for dir in */; do
             TAG="${dir%/}"
@@ -59,13 +59,13 @@ jobs:
               # GitHub Container Registry
               docker buildx build --platform $PLATFORMS \
                 --push \
-                -t ghcr.io/${{ secrets.GHCR_USERNAME }}/$IMAGE_NAME:$TAG \
+                -t ghcr.io/$IMAGE_NAME:$TAG \
                 -f $DOCKERFILE $dir
 
               # Docker Hub
               docker buildx build --platform $PLATFORMS \
                 --push \
-                -t ${{ secrets.DOCKERHUB_USERNAME }}/$IMAGE_NAME:$TAG \
+                -t $IMAGE_NAME:$TAG \
                 -f $DOCKERFILE $dir
             else
               echo "No Dockerfile found in $dir, skipping..."
