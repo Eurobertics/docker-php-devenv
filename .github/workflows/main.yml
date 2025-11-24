@@ -123,13 +123,17 @@ jobs:
           ARCHS=("amd64" "arm64" "armv6" "armv7")
 
           for dir in */; do
+            [ -d "$dir" ] || continue   # <<< SCHUTZ gegen * oder leere Ergebnisse
+
             TAG="${dir%/}"
 
             if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
               continue
             fi
 
-            # GHCR Multiarch-Tag
+            # Hier ggf. Debug für TAG:
+            echo "Building manifest for $TAG ..."
+
             ARCH_TAGS=""
             for arch in "${ARCHS[@]}"; do
               ARCH_TAGS="$ARCH_TAGS ghcr.io/$IMAGE_NAME:$TAG-${arch}-build"
@@ -138,7 +142,6 @@ jobs:
             echo "Creating multiarch manifest ghcr.io/$IMAGE_NAME:$TAG"
             docker buildx imagetools create -t ghcr.io/$IMAGE_NAME:$TAG $ARCH_TAGS
 
-            # DockerHub Multiarch-Tag
             ARCH_TAGS_DH=""
             for arch in "${ARCHS[@]}"; do
               ARCH_TAGS_DH="$ARCH_TAGS_DH $IMAGE_NAME:$TAG-${arch}-build"
