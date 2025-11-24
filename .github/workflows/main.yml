@@ -14,8 +14,8 @@ jobs:
         arch:
           - amd64
           - arm64
-          - arm/v6
-          - arm/v7
+          - armv6
+          - armv7
         include:
           - arch: amd64
             platform: linux/amd64
@@ -119,8 +119,8 @@ jobs:
         run: |
           set -e
           IMAGE_NAME="eurobertics/php-devenv"
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli")
-          ARCHS=("amd64" "arm64")
+          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
+          ARCHS=("amd64" "arm64" "armv6" "armv7")
 
           for dir in */; do
             TAG="${dir%/}"
@@ -149,12 +149,12 @@ jobs:
 
           done
 
-      # Optional: Entferne Build-Arch-Tags (nur für Ordnung, nicht zwingend; kann weggelassen werden)
+      # Optional: Entferne Build-Arch-Tags (nur zur Aufräumzwecken)
       - name: Delete Build-Arch Tags (GHCR)
         run: |
           for dir in */; do
             TAG="${dir%/}"
-            for arch in amd64 arm64; do
+            for arch in amd64 arm64 armv6 armv7; do
               echo "Deleting ghcr.io/$IMAGE_NAME:$TAG-${arch}-build"
               skopeo delete docker://ghcr.io/$IMAGE_NAME:$TAG-${arch}-build || true
             done
