@@ -147,7 +147,7 @@ jobs:
 
           done
 
-    cleanup-build-tags:
+  cleanup-build-tags:
     needs: create-manifests
     runs-on: ubuntu-latest
     steps:
