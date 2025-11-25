@@ -3,62 +3,48 @@ name: Build and Push Multiarch Docker Images
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 jobs:
-  build-image:
+  build-and-push:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch:
-          - amd64
-          - arm64
-          - armv6
-          - armv7
-        include:
-          - arch: amd64
-            platform: linux/amd64
-          - arch: arm64
-            platform: linux/arm64
-          - arch: armv6
-            platform: linux/arm/v6
-          - arch: armv7
-            platform: linux/arm/v7
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
       - name: Log in to GHCR
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ matrix.arch }}-${{ hashFiles('*/Dockerfile') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Build and Push Images for ${{ matrix.platform }}
+      - name: Build and Push Multiarch Images
         run: |
           set -e
           IMAGE_NAME="eurobertics/php-devenv"
           EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
+          PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6"
 
           for dir in */; do
             TAG="${dir%/}"
@@ -71,138 +57,22 @@ jobs:
             fi
 
             if [ -f "$DOCKERFILE" ]; then
-              echo "Building and pushing $IMAGE_NAME:$TAG-${{ matrix.arch }}-build (${{ matrix.platform }})"
-              # GHCR
-              docker buildx build --platform ${{ matrix.platform }} \
+              echo "Building and pushing multiarch image for $TAG"
+              
+              # Build für beide Registries mit einem Befehl
+              docker buildx build \
+                --platform $PLATFORMS \
                 --push \
-                --build-arg BUILDKIT_INLINE_CACHE=1 \
-                --cache-from type=local,src=/tmp/.buildx-cache \
-                --cache-to type=local,dest=/tmp/.buildx-cache-new \
-                -t ghcr.io/$IMAGE_NAME:$TAG-${{ matrix.arch }}-build \
+                --cache-from type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-buildcache \
+                --cache-to type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-buildcache,mode=max \
+                -t ghcr.io/$IMAGE_NAME:$TAG \
+                -t $IMAGE_NAME:$TAG \
                 -f $DOCKERFILE $dir
-
-              # Docker Hub
-              docker buildx build --platform ${{ matrix.platform }} \
-                --push \
-                --build-arg BUILDKIT_INLINE_CACHE=1 \
-                --cache-from type=local,src=/tmp/.buildx-cache \
-                --cache-to type=local,dest=/tmp/.buildx-cache-new \
-                -t $IMAGE_NAME:$TAG-${{ matrix.arch }}-build \
-                -f $DOCKERFILE $dir
+              
+              echo "✓ Successfully built and pushed $TAG"
             else
               echo "No Dockerfile found in $dir, skipping..."
             fi
           done
-
-  create-manifests:
-    needs: build-image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_PAT }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          registry: docker.io
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Create and Push Multiarch Manifests
-        run: |
-          set -e
-          IMAGE_NAME="eurobertics/php-devenv"
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
-          ARCHS=("amd64" "arm64" "armv6" "armv7")
-
-          for dir in */; do
-            [ -d "$dir" ] || continue
-            TAG="${dir%/}"
-            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
-              continue
-            fi
-
-            # GHCR
-            ARCH_TAGS=""
-            for arch in "${ARCHS[@]}"; do
-              ARCH_TAGS="$ARCH_TAGS ghcr.io/$IMAGE_NAME:$TAG-${arch}-build"
-            done
-            echo "Creating multiarch manifest ghcr.io/$IMAGE_NAME:$TAG"
-            docker buildx imagetools create -t ghcr.io/$IMAGE_NAME:$TAG $ARCH_TAGS
-
-            # Docker Hub
-            ARCH_TAGS_DH=""
-            for arch in "${ARCHS[@]}"; do
-              ARCH_TAGS_DH="$ARCH_TAGS_DH $IMAGE_NAME:$TAG-${arch}-build"
-            done
-            echo "Creating multiarch manifest $IMAGE_NAME:$TAG"
-            docker buildx imagetools create -t $IMAGE_NAME:$TAG $ARCH_TAGS_DH
-
-          done
-
-  cleanup-build-tags:
-    needs: create-manifests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install skopeo
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y skopeo
-
-      - name: Log in to GHCR with Skopeo
-        run: |
-          echo "${{ secrets.GHCR_PAT }}" | skopeo login --username "${{ secrets.GHCR_USERNAME }}" --password-stdin ghcr.io
-
-      - name: Delete GHCR Build Artifacts
-        run: |
-          IMAGE_NAME="eurobertics/php-devenv"
-          ARCHS=("amd64" "arm64" "armv6" "armv7")
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
-          for dir in */; do
-            [ -d "$dir" ] || continue
-            TAG="${dir%/}"
-            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
-              continue
-            fi
-            for arch in "${ARCHS[@]}"; do
-              echo "Deleting ghcr.io/$IMAGE_NAME:$TAG-${arch}-build"
-              skopeo delete docker://ghcr.io/$IMAGE_NAME:$TAG-${arch}-build || true
-            done
-          done
-
-      - name: Delete Docker Hub Build Artifacts
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          IMAGE_NAME="php-devenv" # Nur Repo-Teil für die API!
-          DOCKERHUB_OWNER="eurobertics" # Username
-          ARCHS=("amd64" "arm64" "armv6" "armv7")
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
-
-          # Auth holen
-          AUTH_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST -d "{\"username\": \"${DOCKERHUB_USERNAME}\", \"password\": \"${DOCKERHUB_TOKEN}\"}" https://hub.docker.com/v2/users/login/)
-          TOKEN=$(echo $AUTH_RESPONSE | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])")
-
-          for dir in */; do
-            [ -d "$dir" ] || continue
-            TAG="${dir%/}"
-            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
-              continue
-            fi
-            for arch in "${ARCHS[@]}"; do
-              FULL_TAG="$TAG-${arch}-build"
-              echo "Deleting from Docker Hub: $IMAGE_NAME:$FULL_TAG"
-              curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-                -H "Authorization: JWT $TOKEN" \
-                "https://hub.docker.com/v2/repositories/${DOCKERHUB_OWNER}/${IMAGE_NAME}/tags/${FULL_TAG}/"
-              echo # für saubere Log-Ausgabe
-            done
-          done
+          
+          echo "All multiarch images built and pushed successfully!"
