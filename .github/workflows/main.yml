@@ -19,7 +19,7 @@ jobs:
       - name: Generate build matrix
         id: set-matrix
         run: |
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-cli")
+          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-cli" "84-apache24" "85-cli" "85-apache24")
           TAGS=()
           
           for dir in */; do
