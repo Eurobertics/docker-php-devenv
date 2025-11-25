@@ -7,23 +7,67 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  # Job 1: Matrix generieren (Tags + Architekturen)
+  prepare-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.set-matrix.outputs.tags }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Generate build matrix
+        id: set-matrix
+        run: |
+          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
+          TAGS=()
+          
+          for dir in */; do
+            TAG="${dir%/}"
+            DOCKERFILE="$dir/Dockerfile"
+            
+            if [ -f "$DOCKERFILE" ] && [[ ! " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
+              TAGS+=("\"$TAG\"")
+            fi
+          done
+          
+          TAGS_JSON=$(IFS=,; echo "[${TAGS[*]}]")
+          echo "tags=$TAGS_JSON" >> $GITHUB_OUTPUT
+          echo "Building tags: $TAGS_JSON"
+
+  # Job 2: Jede Architektur separat bauen (parallel)
+  build-arch-images:
+    needs: prepare-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 20  # Alle parallel laufen lassen
+      matrix:
+        tag: ${{ fromJson(needs.prepare-matrix.outputs.tags) }}
+        arch:
+          - amd64
+          - arm64
+          - armv7
+          - armv6
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: arm64
+            platform: linux/arm64
+          - arch: armv7
+            platform: linux/arm/v7
+          - arch: armv6
+            platform: linux/arm/v6
+    
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -39,40 +83,156 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and Push Multiarch Images
+      - name: Build and Push ${{ matrix.tag }} for ${{ matrix.arch }}
         run: |
           set -e
           IMAGE_NAME="eurobertics/php-devenv"
-          EXCLUDE_DIRS=("74-apache24" "74-cli" "81-apache24" "81-cli" "82-apache24" "82-cli" "83-apache24" "83-cli" "84-apache24" "85-cli" "85-apache24")
-          PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6"
+          TAG="${{ matrix.tag }}"
+          ARCH="${{ matrix.arch }}"
+          PLATFORM="${{ matrix.platform }}"
+          DOCKERFILE="$TAG/Dockerfile"
+          
+          # Temporärer Tag-Name mit Zeitstempel zur Eindeutigkeit
+          BUILD_ID="${{ github.run_id }}-${{ github.run_attempt }}"
+          TEMP_TAG="$TAG-$ARCH-build-$BUILD_ID"
 
-          for dir in */; do
-            TAG="${dir%/}"
-            DOCKERFILE="$dir/Dockerfile"
+          echo "Building $TAG for $PLATFORM (temp tag: $TEMP_TAG)"
+          
+          # GHCR
+          docker buildx build \
+            --platform $PLATFORM \
+            --push \
+            --cache-from type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-$ARCH-buildcache \
+            --cache-to type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-$ARCH-buildcache,mode=max \
+            --provenance=false \
+            --sbom=false \
+            -t ghcr.io/$IMAGE_NAME:$TEMP_TAG \
+            -f $DOCKERFILE $TAG
+          
+          # Docker Hub
+          docker buildx build \
+            --platform $PLATFORM \
+            --push \
+            --cache-from type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-$ARCH-buildcache \
+            --provenance=false \
+            --sbom=false \
+            -t $IMAGE_NAME:$TEMP_TAG \
+            -f $DOCKERFILE $TAG
+          
+          echo "✓ Built and pushed $TEMP_TAG"
 
-            # Prüfen, ob das Verzeichnis auf der Blacklist ist
-            if [[ " ${EXCLUDE_DIRS[@]} " =~ " $TAG " ]]; then
-              echo "Skipping $TAG (excluded from build)"
-              continue
-            fi
+  # Job 3: Multiarch-Manifeste erstellen
+  create-manifests:
+    needs: [prepare-matrix, build-arch-images]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJson(needs.prepare-matrix.outputs.tags) }}
+    
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-            if [ -f "$DOCKERFILE" ]; then
-              echo "Building and pushing multiarch image for $TAG"
-              
-              # Build für beide Registries mit einem Befehl
-              docker buildx build \
-                --platform $PLATFORMS \
-                --push \
-                --cache-from type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-buildcache \
-                --cache-to type=registry,ref=ghcr.io/$IMAGE_NAME:$TAG-buildcache,mode=max \
-                -t ghcr.io/$IMAGE_NAME:$TAG \
-                -t $IMAGE_NAME:$TAG \
-                -f $DOCKERFILE $dir
-              
-              echo "✓ Successfully built and pushed $TAG"
-            else
-              echo "No Dockerfile found in $dir, skipping..."
-            fi
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create Multiarch Manifest for ${{ matrix.tag }}
+        run: |
+          set -e
+          IMAGE_NAME="eurobertics/php-devenv"
+          TAG="${{ matrix.tag }}"
+          BUILD_ID="${{ github.run_id }}-${{ github.run_attempt }}"
+          ARCHS=("amd64" "arm64" "armv7" "armv6")
+          
+          # GHCR Manifest
+          GHCR_IMAGES=""
+          for arch in "${ARCHS[@]}"; do
+            GHCR_IMAGES="$GHCR_IMAGES ghcr.io/$IMAGE_NAME:$TAG-$arch-build-$BUILD_ID"
           done
           
-          echo "All multiarch images built and pushed successfully!"
+          echo "Creating GHCR manifest for $TAG"
+          docker buildx imagetools create -t ghcr.io/$IMAGE_NAME:$TAG $GHCR_IMAGES
+          
+          # Docker Hub Manifest
+          DH_IMAGES=""
+          for arch in "${ARCHS[@]}"; do
+            DH_IMAGES="$DH_IMAGES $IMAGE_NAME:$TAG-$arch-build-$BUILD_ID"
+          done
+          
+          echo "Creating Docker Hub manifest for $TAG"
+          docker buildx imagetools create -t $IMAGE_NAME:$TAG $DH_IMAGES
+          
+          echo "✓ Multiarch manifest created for $TAG"
+
+  # Job 4: Temporäre Build-Tags löschen
+  cleanup-temp-tags:
+    needs: [prepare-matrix, create-manifests]
+    runs-on: ubuntu-latest
+    if: always()  # Immer ausführen, auch wenn vorherige Jobs fehlschlagen
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJson(needs.prepare-matrix.outputs.tags) }}
+    
+    steps:
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GHCR_PAT }}" | skopeo login --username "${{ secrets.GHCR_USERNAME }}" --password-stdin ghcr.io
+
+      - name: Delete GHCR temporary tags for ${{ matrix.tag }}
+        run: |
+          IMAGE_NAME="eurobertics/php-devenv"
+          TAG="${{ matrix.tag }}"
+          BUILD_ID="${{ github.run_id }}-${{ github.run_attempt }}"
+          ARCHS=("amd64" "arm64" "armv7" "armv6")
+          
+          for arch in "${ARCHS[@]}"; do
+            TEMP_TAG="$TAG-$arch-build-$BUILD_ID"
+            echo "Deleting ghcr.io/$IMAGE_NAME:$TEMP_TAG"
+            skopeo delete docker://ghcr.io/$IMAGE_NAME:$TEMP_TAG || echo "Failed to delete or already gone: $TEMP_TAG"
+          done
+
+      - name: Delete Docker Hub temporary tags for ${{ matrix.tag }}
+        run: |
+          IMAGE_NAME="php-devenv"
+          DOCKERHUB_OWNER="eurobertics"
+          TAG="${{ matrix.tag }}"
+          BUILD_ID="${{ github.run_id }}-${{ github.run_attempt }}"
+          ARCHS=("amd64" "arm64" "armv7" "armv6")
+          
+          # Docker Hub Auth
+          AUTH_RESPONSE=$(curl -s -H "Content-Type: application/json" -X POST \
+            -d "{\"username\": \"${{ secrets.DOCKERHUB_USERNAME }}\", \"password\": \"${{ secrets.DOCKERHUB_TOKEN }}\"}" \
+            https://hub.docker.com/v2/users/login/)
+          TOKEN=$(echo $AUTH_RESPONSE | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+          
+          if [ -z "$TOKEN" ]; then
+            echo "Failed to authenticate with Docker Hub"
+            exit 0
+          fi
+          
+          for arch in "${ARCHS[@]}"; do
+            TEMP_TAG="$TAG-$arch-build-$BUILD_ID"
+            echo "Deleting $IMAGE_NAME:$TEMP_TAG from Docker Hub"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: JWT $TOKEN" \
+              "https://hub.docker.com/v2/repositories/${DOCKERHUB_OWNER}/${IMAGE_NAME}/tags/${TEMP_TAG}/")
+            echo "Response code: $HTTP_CODE"
+          done
